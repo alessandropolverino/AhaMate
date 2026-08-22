@@ -1,0 +1,31 @@
+{
+  "name": "web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "npm run copy-engine && vite",
+    "build": "npm run copy-engine && tsc -b && vite build",
+    "lint": "oxlint",
+    "preview": "vite preview",
+    "copy-engine": "node -e \"const fs=require('fs');fs.mkdirSync('public/engine',{recursive:true});for(const e of ['js','wasm'])fs.copyFileSync('node_modules/stockfish/bin/stockfish-18-lite-single.'+e,'public/engine/stockfish-18-lite-single.'+e)\"",
+    "postinstall": "npm run copy-engine",
+    "test": "node test-puzzles.mjs && node test-engine.mjs && node test-analysis.mjs"
+  },
+  "dependencies": {
+    "chess.js": "^1.4.0",
+    "react": "^19.2.8",
+    "react-chessboard": "^5.12.1",
+    "react-dom": "^19.2.8",
+    "stockfish": "^18.0.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.4",
+    "oxlint": "^1.75.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.0"
+  }
+}

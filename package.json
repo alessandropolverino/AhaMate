@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "copy-engine": "node -e \"const fs=require('fs');fs.mkdirSync('public/engine',{recursive:true});for(const e of ['js','wasm'])fs.copyFileSync('node_modules/stockfish/bin/stockfish-18-lite-single.'+e,'public/engine/stockfish-18-lite-single.'+e)\"",
     "postinstall": "npm run copy-engine",
-    "test": "node test-puzzles.mjs && node test-engine.mjs && node test-analysis.mjs"
+    "test": "node test-puzzles.mjs && node test-board.mjs && node test-engine.mjs && node test-analysis.mjs"
   },
   "dependencies": {
     "chess.js": "^1.4.0",

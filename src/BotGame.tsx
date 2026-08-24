@@ -3,7 +3,8 @@ import { Chess, type Square } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 import type { PieceDropHandlerArgs, SquareHandlerArgs } from 'react-chessboard';
 import { AnalysisPanel } from './AnalysisPanel';
-import { DARK_SQUARE, LIGHT_SQUARE, squareStylesFor } from './board';
+import type { Annotation } from './Reasons';
+import { DARK_SQUARE, HIGHLIGHT, LIGHT_SQUARE, movePairs, squareStylesFor } from './board';
 import {
   continuationOf,
   explain,
@@ -54,10 +55,19 @@ export default function BotGame({ t }: Props) {
   const [hoverUci, setHoverUci] = useState<string | null>(null);
   /** `${fen} ${uci}` → refutation, so re-hovering a square costs no search. */
   const [refCache, setRefCache] = useState<Record<string, Refutation | null>>({});
+  /**
+   * Judging your move after you commit to it gets its own toggle: being told
+   * what you just did is a different bargain from being helped beforehand.
+   */
+  const [reviewMine, setReviewMine] = useState(false);
+  /** ply index → what that move was worth. Grows as the game is played. */
+  const [annotations, setAnnotations] = useState<Record<number, Annotation>>({});
+  /** Which past move the board is rewound to, if any. */
+  const [viewPly, setViewPly] = useState<number | null>(null);
 
   const fen = game.fen();
   const myTurn = !thinking && !game.isGameOver() && game.turn() === playerColor;
-  const history = game.history({ verbose: true });
+  const history = useMemo(() => game.history({ verbose: true }), [game]);
   const lastMove = history[history.length - 1];
 
   useEffect(() => {
@@ -154,7 +164,7 @@ export default function BotGame({ t }: Props) {
     if (!ready || ready.lines.length < 2) return [];
     return ready.lines
       .slice(1)
-      .map((l) => refute(fen, l.moveUci, ready.lines[0], continuationOf(l)))
+      .map((l) => refute(fen, l.moveUci, ready.lines[0], continuationOf(fen, l)))
       .filter((r): r is Refutation => r !== null);
   }, [ready, fen]);
 
@@ -191,7 +201,7 @@ export default function BotGame({ t }: Props) {
 
     const remember = (r: Refutation | null) => setRefCache((c) => ({ ...c, [key]: r }));
     const known = ready.lines.find((l) => l.moveUci === activeUci);
-    if (known) return remember(refute(fen, activeUci, ready.lines[0], continuationOf(known)));
+    if (known) return remember(refute(fen, activeUci, ready.lines[0], continuationOf(fen, known)));
 
     let cancelled = false;
     const timer = setTimeout(() => {
@@ -212,6 +222,70 @@ export default function BotGame({ t }: Props) {
     };
   }, [activeUci, hoverUci, ready, fen, refCache]);
 
+  /**
+   * A note only counts while it still describes the move sitting at that ply:
+   * a takeback leaves the old one behind, pointing at a move never played.
+   */
+  const annotationAt = useCallback(
+    (ply: number) => {
+      const a = annotations[ply];
+      return a && history[ply]?.before === a.fen ? a : undefined;
+    },
+    [annotations, history],
+  );
+
+  /**
+   * Annotates the move just played — yours or the engine's — with what it was
+   * worth and what the position wanted instead. One effect covers both: it
+   * always works on the newest un-annotated ply, so a takeback simply drops
+   * back to a move that already carries its note.
+   *
+   * chess.js hands over the before/after FENs, so nothing has to be replayed.
+   */
+  useEffect(() => {
+    const ply = history.length - 1;
+    const move = history[ply];
+    if (!move || annotationAt(ply)) return;
+    // Your moves are governed by the review toggle, the engine's by assisted
+    // mode: being told what you just did is not the same as being helped.
+    if (!(move.color === playerColor ? reviewMine : assist)) return;
+    // Assisted mode may never have built it: the review toggle stands alone.
+    const analyst = (analystRef.current ??= new ChessEngine());
+
+    let cancelled = false;
+    Promise.all([analyst.analyze(move.before, 12, 3), analyst.analyze(move.after, 12, 1)]).then(
+      ([best, [next]]) => {
+        if (cancelled || !best[0]) return;
+        const uci = `${move.from}${move.to}${move.promotion ?? ''}`;
+        // Same guard assisted mode uses: the engine occasionally returns a
+        // line this position rejects, and a note is not worth a blank page.
+        let scored: Pick<Annotation, 'refutation' | 'explanation'>;
+        try {
+          scored = {
+            refutation: refute(move.before, uci, best[0], next ?? null),
+            explanation: explain(move.before, best),
+          };
+        } catch {
+          return;
+        }
+        setAnnotations((prev) => ({
+          ...prev,
+          [ply]: {
+            fen: move.before,
+            from: move.from,
+            to: move.to,
+            san: move.san,
+            by: move.color as Color,
+            ...scored,
+          },
+        }));
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [history, annotationAt, assist, reviewMine, playerColor]);
+
   /** Validates a typed move and queues it for analysis. Returns an error key. */
   const addMove = (text: string): string | null => {
     const parsed = parseMove(fen, text);
@@ -227,8 +301,10 @@ export default function BotGame({ t }: Props) {
   const tryMove = (from: string, to: string) => {
     if (!myTurn) return false;
     const legal = game.moves({ verbose: true }).some((m) => m.from === from && m.to === to);
-    if (legal) play((g) => g.move({ from, to, promotion: 'q' }));
-    return legal;
+    if (!legal) return false;
+    setViewPly(null); // a new move ends whatever you were looking back at
+    play((g) => g.move({ from, to, promotion: 'q' }));
+    return true;
   };
 
   const onPieceDrop = ({ sourceSquare, targetSquare }: PieceDropHandlerArgs) =>
@@ -264,28 +340,58 @@ export default function BotGame({ t }: Props) {
     [currentAnalysis],
   );
 
+
   const newGame = (color: Color) => {
     setPlayerColor(color);
     setSelected(null);
     setGame(new Chess());
+    setAnnotations({});
+    setViewPly(null);
   };
 
-  const takeback = () =>
+  // The notes for the moves that survive stay valid; the ones for the moves
+  // being unplayed are discarded by `annotationAt`, which checks the position.
+  const takeback = () => {
+    setViewPly(null);
     play((g) => {
       g.undo();
       if (g.turn() !== playerColor) g.undo(); // also undo the engine's reply
     });
+  };
 
-  const rows = useMemo(() => {
-    const san = game.history();
-    return Array.from({ length: Math.ceil(san.length / 2) }, (_, i) => ({
-      n: i + 1,
-      white: san[i * 2],
-      black: san[i * 2 + 1],
-    }));
-  }, [game]);
+  const rows = useMemo(() => movePairs(game.history()), [game]);
 
   const colorLabel = (c: Color) => t(c === 'w' ? 'label.white' : 'label.black');
+
+  /**
+   * Looking back at a move shows the position it was played FROM, with the
+   * move drawn on top — an arrow on the position after it points at nothing.
+   */
+  const viewed = viewPly !== null ? history[viewPly] : undefined;
+  const shownFen = viewed ? viewed.before : fen;
+  const shownArrows = viewed
+    ? [{ startSquare: viewed.from, endSquare: viewed.to, color: '#81b64c' }]
+    : arrows;
+  const shownStyles = viewed
+    ? { [viewed.from]: HIGHLIGHT, [viewed.to]: HIGHLIGHT }
+    : squareStyles;
+
+  /**
+   * What the panel talks about: the move you clicked, or else BOTH halves of
+   * the exchange just played — yours and the answer to it. Showing only the
+   * newest would let the engine's reply quietly replace the review of your own
+   * move a second after it appears, leaving a card about a move you did not
+   * just make.
+   */
+  const spotlight = useMemo(() => {
+    const plies = viewPly !== null ? [viewPly] : [history.length - 2, history.length - 1];
+    return plies
+      .filter((ply) => ply >= 0)
+      .map((ply) => ({ ply, a: annotationAt(ply) }))
+      .flatMap(({ ply, a }) =>
+        a ? [{ key: ply, a, mine: a.by === playerColor }] : [],
+      );
+  }, [viewPly, history, annotationAt, playerColor]);
 
   return (
     <div className="app">
@@ -293,10 +399,10 @@ export default function BotGame({ t }: Props) {
         t={t}
         enabled={assist}
         onToggle={setAssist}
-        loading={analyzing}
-        analysis={currentAnalysis}
+        loading={analyzing && !viewed}
+        analysis={viewed ? null : currentAnalysis}
         counter={
-          currentAnalysis && {
+          viewed || !currentAnalysis ? null : {
             chips,
             activeUci,
             onPick: (uci: string) => setPick({ fen, uci }),
@@ -305,7 +411,10 @@ export default function BotGame({ t }: Props) {
             loading: counterLoading,
           }
         }
-        idleKey={assist ? assistIdleKey : null}
+        idleKey={assist && !viewed ? assistIdleKey : null}
+        annotations={spotlight}
+        reviewMine={reviewMine}
+        onToggleReview={setReviewMine}
       />
 
       <main className="board-area">
@@ -316,15 +425,15 @@ export default function BotGame({ t }: Props) {
           <Chessboard
             options={{
               id: 'main-board',
-              position: fen,
+              position: shownFen,
               boardOrientation: playerColor === 'w' ? 'white' : 'black',
               onPieceDrop,
               onSquareClick,
               onMouseOverSquare,
               onMouseOutSquare: () => setHoverUci(null),
-              squareStyles,
-              arrows,
-              allowDragging: myTurn,
+              squareStyles: shownStyles,
+              arrows: shownArrows,
+              allowDragging: myTurn && !viewed,
               darkSquareStyle: DARK_SQUARE,
               lightSquareStyle: LIGHT_SQUARE,
               animationDurationInMs: 180,
@@ -385,15 +494,39 @@ export default function BotGame({ t }: Props) {
           </button>
         </section>
 
+        {rows.length > 0 && <p className="muted">{t('review.historyHint')}</p>}
         <ol className="moves">
           {rows.map((r) => (
             <li key={r.n}>
               <span className="num">{r.n}.</span>
-              <span className="san">{r.white}</span>
-              <span className="san">{r.black ?? ''}</span>
+              {[r.white, r.black].map((cell, i) =>
+                cell ? (
+                  <button
+                    key={i}
+                    type="button"
+                    className={cell.ply === viewPly ? 'san active' : 'san'}
+                    aria-pressed={cell.ply === viewPly}
+                    onClick={() =>
+                      setViewPly((current) => (current === cell.ply ? null : cell.ply))
+                    }
+                  >
+                    {cell.san}
+                    {annotationAt(cell.ply)?.refutation && (
+                      <span className={`dot ${annotationAt(cell.ply)!.refutation!.verdict}`} />
+                    )}
+                  </button>
+                ) : (
+                  <span key={i} className="san" />
+                ),
+              )}
             </li>
           ))}
         </ol>
+        {viewed && (
+          <button type="button" className="btn" onClick={() => setViewPly(null)}>
+            {t('review.back')}
+          </button>
+        )}
       </aside>
     </div>
   );

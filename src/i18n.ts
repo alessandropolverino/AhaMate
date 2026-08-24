@@ -56,6 +56,7 @@ const IT: Record<string, string> = {
   'puzzle.stepHint': 'Clicca una mossa per rivederla sulla scacchiera.',
   'puzzle.moveN': 'Mossa {n}',
   'puzzle.themes': 'Temi',
+  'puzzle.askHint': 'Scrivi una mossa con + per sapere quanto vale rispetto alla migliore.',
   'puzzle.source': 'Problema dal database Lichess:',
 
   'theme.mate': 'matto',
@@ -146,6 +147,12 @@ const IT: Record<string, string> = {
   'detail.trend': 'da {from} a {to} unità d’attacco',
   'detail.swing': '{move}, materiale {delta}',
 
+  'review.title': 'La tua mossa {san}',
+  'review.theirs': 'La mossa dell’avversario: {san}',
+  'review.toggle': 'Valuta le mie mosse',
+  'review.none': 'Questa mossa non è stata valutata.',
+  'review.back': 'Torna alla partita',
+  'review.historyHint': 'Clicca una mossa della lista per rivederla.',
   'counter.title': 'Perché non…',
   'counter.hint': 'Passa il mouse su una casa dopo aver selezionato un pezzo, oppure aggiungi tu una mossa con +.',
   'counter.add': 'Chiedi di una mossa',
@@ -204,6 +211,7 @@ const EN: Record<string, string> = {
   'puzzle.stepHint': 'Click a move to replay it on the board.',
   'puzzle.moveN': 'Move {n}',
   'puzzle.themes': 'Themes',
+  'puzzle.askHint': 'Name a move with + to see what it is worth against the best one.',
   'puzzle.source': 'Puzzle from the Lichess database:',
 
   'theme.mate': 'mate',
@@ -292,6 +300,12 @@ const EN: Record<string, string> = {
   'detail.trend': 'from {from} to {to} attack units',
   'detail.swing': '{move}, material {delta}',
 
+  'review.title': 'Your move {san}',
+  'review.theirs': 'Your opponent played {san}',
+  'review.toggle': 'Review my moves',
+  'review.none': 'This move was not evaluated.',
+  'review.back': 'Back to the game',
+  'review.historyHint': 'Click a move in the list to look back at it.',
   'counter.title': 'Why not…',
   'counter.hint': 'Select one of your pieces and hover a square, or add a move yourself with +.',
   'counter.add': 'Ask about a move',

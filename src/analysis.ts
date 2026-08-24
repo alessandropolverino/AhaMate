@@ -515,8 +515,22 @@ export type Refutation = {
  * eval of playing that move, and its PV tail starts with the opponent's reply.
  * Lets an alternative be refuted without spending a second search on it.
  */
-export function continuationOf(line: EngineLine): EngineLine | null {
-  return line.pv.length < 2 ? null : { ...line, moveUci: line.pv[1], pv: line.pv.slice(1) };
+export function continuationOf(fen: string, line: EngineLine): EngineLine | null {
+  if (line.pv.length < 2) return null;
+  // The score was measured AT `fen`, and this line describes the position one
+  // ply on. A centipawn score survives the shift — same leaf either way — but
+  // a mate distance counts the mating side's remaining moves, so it drops by
+  // one when the side just to move is the one delivering it. Without this the
+  // reply is described with the distance its own predecessor had.
+  const whiteToMove = fen.split(' ')[1] === 'w';
+  const mateIn = line.mateIn ?? 0;
+  const moverMates = line.isMate && mateIn > 0 === whiteToMove;
+  return {
+    ...line,
+    moveUci: line.pv[1],
+    pv: line.pv.slice(1),
+    mateIn: moverMates ? mateIn - Math.sign(mateIn) : line.mateIn,
+  };
 }
 
 /**

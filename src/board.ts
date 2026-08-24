@@ -2,6 +2,7 @@
  * Board decoration shared by every page: last move, check, selection and legal
  * move dots. Pure — pages merge their own highlights (a puzzle hint, say) on top.
  */
+import type { CSSProperties } from 'react';
 import type { Chess, Square } from 'chess.js';
 
 export const HIGHLIGHT = { backgroundColor: 'rgba(255, 213, 79, 0.45)' };
@@ -15,7 +16,7 @@ export const LIGHT_SQUARE = { backgroundColor: '#eeeed2' };
 export const DARK_SQUARE = { backgroundColor: '#769656' };
 
 export function squareStylesFor(game: Chess, selected: Square | null) {
-  const styles: Record<string, React.CSSProperties> = {};
+  const styles: Record<string, CSSProperties> = {};
   const moves = game.history({ verbose: true });
   const last = moves[moves.length - 1];
   if (last) {
@@ -36,4 +37,18 @@ export function squareStylesFor(game: Chess, selected: Square | null) {
     }
   }
   return styles;
+}
+
+/**
+ * A SAN history as numbered rows of [white, black], each cell carrying the ply
+ * it came from so clicking it can rewind the board. The ply is the index into
+ * `history()` — get this wrong and every move review is off by one.
+ */
+export function movePairs(san: string[]) {
+  const cell = (ply: number) => (san[ply] ? { ply, san: san[ply] } : null);
+  return Array.from({ length: Math.ceil(san.length / 2) }, (_, i) => ({
+    n: i + 1,
+    white: cell(i * 2),
+    black: cell(i * 2 + 1),
+  }));
 }

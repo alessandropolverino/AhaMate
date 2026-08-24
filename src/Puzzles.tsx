@@ -4,20 +4,10 @@ import { Chessboard } from 'react-chessboard';
 import type { PieceDropHandlerArgs, SquareHandlerArgs } from 'react-chessboard';
 import { DARK_SQUARE, HIGHLIGHT, HINT, LIGHT_SQUARE, squareStylesFor } from './board';
 import { PUZZLES, isSolverPly, puzzleUrl, reviewOf, uciToMove, type Puzzle } from './puzzle';
-import type { Msg, Params } from './i18n';
-
-type T = (key: string, params?: Params) => string;
+import { MoveEvaluator, Reason, type T } from './Reasons';
+import { useEvaluator } from './useEvaluator';
 
 const randomPuzzle = () => PUZZLES[Math.floor(Math.random() * PUZZLES.length)];
-
-function Reason({ t, msg }: { t: T; msg: Msg }) {
-  return (
-    <li className={msg.line ? 'has-line' : undefined} data-line={msg.line} tabIndex={msg.line ? 0 : undefined}>
-      {t(msg.key, msg.params)}
-      {msg.detail && <span className="detail">{t(msg.detail.key, msg.detail.params)}</span>}
-    </li>
-  );
-}
 
 /**
  * One puzzle, start to finish. Remounted per puzzle (keyed by id), so every
@@ -119,6 +109,10 @@ function PuzzleRunner({ t, puzzle, onNext }: { t: T; puzzle: Puzzle; onNext: () 
       }
     : squareStyles;
 
+  // Scored from whatever position is on the board: the live one while you are
+  // solving, the one a review step is rewound to once you are done.
+  const evaluator = useEvaluator(shownFen, null);
+
   const statusKey = solved
     ? 'puzzle.solved'
     : wrong
@@ -207,6 +201,10 @@ function PuzzleRunner({ t, puzzle, onNext }: { t: T; puzzle: Puzzle; onNext: () 
             </div>
           </section>
         )}
+
+        <section className="analysis">
+          <MoveEvaluator t={t} ev={evaluator} hintKey="puzzle.askHint" />
+        </section>
 
         <section className="actions">
           <button type="button" className="btn primary" onClick={onNext}>

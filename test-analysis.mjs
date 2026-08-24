@@ -148,6 +148,15 @@ assert.ok(blunderBest, 'the K+Q vs K position must produce a search result');
 const afterBlunder = new Chess(BLUNDER_FEN);
 afterBlunder.move({ from: 'd2', to: 'd7', promotion: 'q' });
 const blunderReply = (await multipv(e, afterBlunder.fen(), 14, 1))[0];
+
+// The move you PLAY is scored the same way, so the review of your own move has
+// to name the mate it walks into: 1.e4 e5 2.Bc4 Nc6 3.Qh5 Nf6?? 4.Qxf7#.
+const scholar = new Chess();
+['e4', 'e5', 'Bc4', 'Nc6', 'Qh5'].forEach((m) => scholar.move(m));
+const scholarBest = (await multipv(e, scholar.fen(), 14, 1))[0];
+const afterNf6 = new Chess(scholar.fen());
+afterNf6.move({ from: 'g8', to: 'f6', promotion: 'q' });
+const scholarReply = (await multipv(e, afterNf6.fen(), 14, 1))[0];
 e.kill();
 assert.ok(tasks.length >= 15, `expected a decent sample, got ${tasks.length} moves`);
 
@@ -238,6 +247,29 @@ assert.equal(sac.detail.params.move, 'Nxb8');
 assert.equal(sac.detail.params.delta, '-9');
 
 
+// --- a carried score must describe the position it is carried TO ------------
+// The Opera Game line is 17. Qb8+ Nxb8 18. Rd8#, mate in 2. One ply on, White
+// still mates but needs one move fewer — reusing the root's "2" is how a reply
+// ends up described with its predecessor's distance.
+const afterQb8 = new Chess(morphy.fen);
+afterQb8.move({ from: morphy.pv[0].slice(0, 2), to: morphy.pv[0].slice(2, 4), promotion: 'q' });
+
+const carried = continuationOf(morphy.fen, mateLine);
+assert.equal(carried.moveUci, morphy.pv[1], 'the continuation must start at the reply');
+assert.equal(carried.mateIn, 1, `mate distance must shift with the ply, got ${carried.mateIn}`);
+
+// Nxb8 is Black's move and Black is the one being mated, so the sentence is
+// about walking into it, one move away — not about delivering it.
+const walked = explain(afterQb8.fen(), [carried]).best;
+assert.equal(walked.reasons[0].key, 'reason.getsMated');
+assert.equal(walked.reasons[0].params.n, 1, 'the distance must be the carried one, not the root one');
+
+// The other direction: the side being mated moving does NOT bring mate closer.
+const mated = { ...mateLine, mateIn: 1, pv: morphy.pv.slice(1) };
+assert.equal(continuationOf(afterQb8.fen(), mated).mateIn, 1,
+  'the mated side moving must not shorten the distance');
+console.log(`ok  carried mate distance    #2 -> #${carried.mateIn} one ply on`);
+
 // Numbering must survive a black-to-move position.
 const black = tasks.find((t) => t.name === 'Black to move');
 const blackLine = explain(black.fen, [
@@ -266,14 +298,14 @@ assert.equal(classify(30), 'blunder');
 // The best move is never a mistake against itself.
 for (const [name, lines] of searches) {
   const fen = POSITIONS.find(([n]) => n === name)[1];
-  const self = refute(fen, lines[0].moveUci, lines[0], continuationOf(lines[0]));
+  const self = refute(fen, lines[0].moveUci, lines[0], continuationOf(fen, lines[0]));
   if (self) {
     assert.equal(self.verdict, 'best', `${name}: the top move must classify as best`);
     assert.equal(self.lossPct, 0, `${name}: the top move cannot cost anything`);
   }
   // Every runner-up is refuted from its own PV — no extra search.
   for (const line of lines.slice(1)) {
-    const r = refute(fen, line.moveUci, lines[0], continuationOf(line));
+    const r = refute(fen, line.moveUci, lines[0], continuationOf(fen, line));
     if (!r) continue;
     assert.ok(r.lossPct >= 0, `${name} ${r.san}: loss cannot be negative`);
     assert.ok(
@@ -296,6 +328,16 @@ assert.equal(blunder.verdict, 'blunder', `expected a blunder, got ${blunder.verd
 assert.ok(blunder.lossPct >= 30, `blunder must cost >=30% win probability, got ${blunder.lossPct}`);
 assert.equal(blunder.punishment.san, 'Kxd7', 'the refutation is simply taking the queen');
 console.log(`ok  hung queen               Qd7+ -> ${blunder.punishment.san}, -${blunder.lossPct}% (${blunder.verdict})`);
+
+// --- a move that hands the opponent a forced mate ----------------------------
+const walkIn = refute(scholar.fen(), 'g8f6', scholarBest, scholarReply);
+assert.equal(walkIn.san, 'Nf6');
+assert.equal(walkIn.verdict, 'blunder', `walking into mate must be a blunder, got ${walkIn.verdict}`);
+assert.equal(walkIn.evalLabel, '#1', 'the eval must show the mate, not a centipawn score');
+assert.equal(walkIn.punishment.san, 'Qxf7#');
+assert.equal(walkIn.punishment.reasons[0].key, 'reason.matesNow',
+  'the mate the move allows must be stated, not left to the eval');
+console.log(`ok  walks into mate          Nf6 -> ${walkIn.punishment.san} (${walkIn.evalLabel})`);
 
 // --- every numeric claim keeps its metric on screen --------------------------
 const NEEDS_DETAIL = [

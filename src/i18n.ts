@@ -125,6 +125,8 @@ const IT: Record<string, string> = {
   // Reasons read as coaching, not as a metric dump; the number each one rests on
   // stays on screen in `detail`, so no claim becomes unauditable.
   'reason.mate': 'porta a matto forzato in {n}',
+  'reason.matesNow': 'dà matto',
+  'reason.getsMated': 'non evita il matto forzato: l’avversario matta in {n}',
   'reason.sacrifice': 'e per arrivarci regala materiale: è un sacrificio, non una svista',
   'reason.fork': 'colpisce due bersagli in una volta sola, e l’avversario non può salvarli entrambi',
   'reason.forkCheck': 'dà scacco e nello stesso tempo attacca un altro pezzo: il re deve muoversi, il pezzo resta lì',
@@ -268,6 +270,8 @@ const EN: Record<string, string> = {
   'assist.because': 'Why',
 
   'reason.mate': 'leads to forced mate in {n}',
+  'reason.matesNow': 'delivers checkmate',
+  'reason.getsMated': 'does not stop the forced mate: your opponent mates in {n}',
   'reason.sacrifice': 'and gives up material to get there — a sacrifice, not an oversight',
   'reason.fork': 'hits two targets at once, and your opponent cannot save both',
   'reason.forkCheck': 'gives check and attacks another piece at the same time: the king must move, the piece stays',

@@ -113,6 +113,12 @@ body {
 
 .board { width: 100%; }
 
+/* Once the row wraps, DOM order would put the analysis column above the board
+   and every re-render of it would shove the board down the page. */
+@media (max-width: 1275px) {
+  .board-area { order: -1; }
+}
+
 .player-tag {
   color: var(--muted);
   font-weight: 600;

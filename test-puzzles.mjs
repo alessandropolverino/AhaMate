@@ -84,7 +84,15 @@ for (const puzzle of PUZZLES) {
     const first = review[0].explanation.best;
     assert.equal(first.evalLabel, `#${solverColor === 'w' ? review.length : -review.length}`,
       `${where}: mate distance must match the known solution`);
-    assert.equal(first.reasons[0].key, 'reason.mate', `${where}: a forced mate must be stated first`);
+    // The sentence describes what the move DOES, so it counts the solver moves
+    // left AFTER it: the move that mates says so, the one before it announces 1.
+    const last = review[review.length - 1].explanation.best;
+    assert.equal(last.reasons[0].key, 'reason.matesNow', `${where}: the mating move must say so`);
+    if (review.length > 1) {
+      assert.equal(first.reasons[0].key, 'reason.mate', `${where}: a forced mate must be stated first`);
+      assert.equal(first.reasons[0].params.n, review.length - 1,
+        `${where}: mate distance must count the moves left after this one`);
+    }
     assert.match(first.reasons[0].line, /^\d+\.(\.\.)? /, `${where}: the mating line must be shown`);
   }
 }

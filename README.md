@@ -16,8 +16,8 @@ il dropdown **Gioca → Bot** (un `<details>` nativo, accessibile da tastiera) e
 
 ## Problemi
 
-150 problemi reali dal **database Lichess** (CC0, `database.lichess.org`), scelti su
-5 fasce di difficoltà fra 627 e 2391 Elo, solo con `Popularity ≥ 90` e `NbPlays ≥ 1000`.
+1000 problemi reali dal **database Lichess** (CC0, `database.lichess.org`), scelti su
+5 fasce di difficoltà fra 638 e 2393 Elo, solo con `Popularity ≥ 90` e `NbPlays ≥ 1000`.
 Rigenerabili con `python3 scripts/fetch-puzzles.py` (serve `pip install zstandard`).
 
 - **Suggerimento** a due livelli: una pressione evidenzia il pezzo da muovere, due

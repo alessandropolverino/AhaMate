@@ -338,6 +338,7 @@ export function buildMoveFacts(fen: string, line: EngineLine) {
     evalLabel: line.isMate ? `#${line.mateIn}` : formatCp(line.scoreCp),
     isMate: line.isMate,
     mateIn: line.mateIn,
+    mover: pos.mover,
     fork: fork(pos),
     newPins: pin(pos),
     undefended: undefendedPieces(pos),
@@ -378,7 +379,15 @@ export function explain(fen: string, lines: EngineLine[]): Explanation | null {
   const line = best.pvSan || undefined;
 
   if (best.isMate) {
-    reasons.push({ key: 'reason.mate', params: { n: Math.abs(best.mateIn ?? 0) }, line });
+    // `mateIn` counts from BEFORE the move, this one included; the sentence
+    // describes what the move does, so it counts what is left AFTER it.
+    const moverMates = (best.mateIn ?? 0) > 0 === (best.mover === 'w');
+    const left = Math.abs(best.mateIn ?? 0) - 1;
+    reasons.push(
+      moverMates && left === 0
+        ? { key: 'reason.matesNow', line }
+        : { key: moverMates ? 'reason.mate' : 'reason.getsMated', params: { n: moverMates ? left : Math.abs(best.mateIn ?? 0) }, line },
+    );
     if (best.swing) {
       reasons.push({
         key: 'reason.sacrifice',

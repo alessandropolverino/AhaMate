@@ -22,8 +22,8 @@ import urllib.request
 import zstandard
 
 URL = "https://database.lichess.org/lichess_db_puzzle.csv.zst"
-SCAN_ROWS = 60_000
-PER_BAND = 30
+SCAN_ROWS = 400_000
+PER_BAND = 200
 BANDS = [(600, 999), (1000, 1299), (1300, 1599), (1600, 1999), (2000, 2400)]
 OUT = pathlib.Path(__file__).resolve().parent.parent / "src" / "puzzles.ts"
 
@@ -66,6 +66,7 @@ def main() -> None:
         # so the set isn't 30 variations on the same famous position.
         step = max(1, len(band) // PER_BAND)
         picked += band[::step][:PER_BAND]
+        print(f"  {low}-{high}: {len(band)} eligible -> {min(len(band), PER_BAND)} picked")
 
     out = [
         {

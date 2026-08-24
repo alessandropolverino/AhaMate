@@ -130,8 +130,14 @@ export default function BotGame({ t }: Props) {
       ? ('assist.waitYourTurn' as const)
       : null;
 
-  /** The analysis only counts while it still describes the position on screen. */
-  const ready = analysis?.fen === fen ? analysis : null;
+  /**
+   * The analysis only counts while it still describes the position on screen
+   * AND you still asked for it. Gating here rather than at each consumer is
+   * what makes switching off actually switch off: the arrow, the counter and
+   * the reasons all hang off this. The result stays in state, so switching
+   * back on again costs no second search.
+   */
+  const ready = assist && analysis?.fen === fen ? analysis : null;
   const currentAnalysis = ready?.data ?? null;
   const analyzing = assist && !assistIdleKey && !ready;
 
@@ -222,6 +228,12 @@ export default function BotGame({ t }: Props) {
     };
   }, [activeUci, hoverUci, ready, fen, refCache]);
 
+  /** Which switch governs a move: yours are reviewed, the engine's is assisted. */
+  const wanted = useCallback(
+    (by: Color) => (by === playerColor ? reviewMine : assist),
+    [playerColor, reviewMine, assist],
+  );
+
   /**
    * A note only counts while it still describes the move sitting at that ply:
    * a takeback leaves the old one behind, pointing at a move never played.
@@ -248,7 +260,7 @@ export default function BotGame({ t }: Props) {
     if (!move || annotationAt(ply)) return;
     // Your moves are governed by the review toggle, the engine's by assisted
     // mode: being told what you just did is not the same as being helped.
-    if (!(move.color === playerColor ? reviewMine : assist)) return;
+    if (!wanted(move.color as Color)) return;
     // Assisted mode may never have built it: the review toggle stands alone.
     const analyst = (analystRef.current ??= new ChessEngine());
 
@@ -284,7 +296,7 @@ export default function BotGame({ t }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [history, annotationAt, assist, reviewMine, playerColor]);
+  }, [history, annotationAt, wanted]);
 
   /** Validates a typed move and queues it for analysis. Returns an error key. */
   const addMove = (text: string): string | null => {
@@ -389,9 +401,11 @@ export default function BotGame({ t }: Props) {
       .filter((ply) => ply >= 0)
       .map((ply) => ({ ply, a: annotationAt(ply) }))
       .flatMap(({ ply, a }) =>
-        a ? [{ key: ply, a, mine: a.by === playerColor }] : [],
+        // Switched off means nothing shows up on its own — but a move you
+        // clicked is something you asked for, so a stored note still opens.
+        a && (viewPly !== null || wanted(a.by)) ? [{ key: ply, a, mine: a.by === playerColor }] : [],
       );
-  }, [viewPly, history, annotationAt, playerColor]);
+  }, [viewPly, history, annotationAt, playerColor, wanted]);
 
   return (
     <div className="app">

@@ -97,6 +97,31 @@ for (const puzzle of PUZZLES) {
   }
 }
 
+// --- a sacrifice belongs to the move that makes it ---------------------------
+// 2G0w2 is the textbook smothered mate: Nh3+ Kh1 Qg1+!! Rxg1 Nf2#. The queen
+// goes on Qg1+, NOT on Nh3+ — attributing it to Nh3+ (whose PV merely contains
+// Rxg1) is the bug this pins down.
+const smothered = PUZZLES.find((p) => p.id === '2G0w2');
+if (smothered) {
+  const [prep, sacrifice, mate] = reviewOf(smothered).map((s) => s.explanation.best);
+  const sacKey = (m) => m.reasons.find((r) => r.key.startsWith('reason.sacrific'))?.key;
+
+  assert.equal(prep.san, 'Nh3+');
+  assert.equal(sacKey(prep), 'reason.sacrificePrepared', 'Nh3+ only prepares the sacrifice');
+
+  assert.equal(sacrifice.san, 'Qg1+');
+  assert.equal(sacKey(sacrifice), 'reason.sacrifice', 'Qg1+ is the move that gives the queen');
+  const detail = sacrifice.reasons.find((r) => r.key === 'reason.sacrifice').detail;
+  assert.equal(detail.params.move, 'Rxg1');
+  // Black is sacrificing, so the cost reads from Black's side, not White's.
+  assert.equal(detail.params.delta, '-9');
+
+  assert.equal(mate.san, 'Nf2#');
+  assert.equal(mate.reasons[0].key, 'reason.matesNow');
+  assert.equal(sacKey(mate), undefined, 'the mating move gives up nothing');
+  console.log('ok  smothered mate           Nh3+ prepares, Qg1+ sacrifices, Nf2# mates');
+}
+
 console.log(`ok  ${PUZZLES.length} puzzles replay legally with chess.js`);
 console.log(`ok  ${solverMoves} solver moves explained from the known solution`);
 console.log(`ok  ${mates} puzzles end in mate, each announced at the right distance`);

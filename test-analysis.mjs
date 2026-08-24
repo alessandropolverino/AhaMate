@@ -201,7 +201,8 @@ console.log('ok  explanation assembly');
 
 // --- "…the line…" tooltips ---------------------------------------------------
 const LINE_KEYS = [
-  'reason.mate', 'reason.sacrifice', 'reason.combination',
+  'reason.mate', 'reason.matesNow', 'reason.getsMated',
+  'reason.sacrifice', 'reason.sacrificePrepared', 'reason.combination',
   'reason.passedPawn', 'reason.sustainedPressure',
 ];
 
@@ -228,6 +229,14 @@ for (const [label, explained, fen] of [
   }
 }
 assert.match(mate.best.reasons[0].line, /^17\. Qb8\+ /);
+
+// Qb8+ IS the sacrifice: Nxb8 takes on the very next ply. The cost is stated
+// from the mover's side, so a queen handed over reads as -9, never +9.
+const sac = mate.best.reasons.find((r) => r.key.startsWith('reason.sacrific'));
+assert.equal(sac.key, 'reason.sacrifice', 'a piece taken on the next ply is THIS move sacrificing it');
+assert.equal(sac.detail.params.move, 'Nxb8');
+assert.equal(sac.detail.params.delta, '-9');
+
 
 // Numbering must survive a black-to-move position.
 const black = tasks.find((t) => t.name === 'Black to move');
@@ -292,7 +301,7 @@ console.log(`ok  hung queen               Qd7+ -> ${blunder.punishment.san}, -${
 const NEEDS_DETAIL = [
   'reason.fork', 'reason.forkCheck', 'reason.undefended', 'reason.kingPressure',
   'reason.centerPressure', 'reason.combination', 'reason.passedPawn',
-  'reason.sustainedPressure', 'reason.sacrifice',
+  'reason.sustainedPressure', 'reason.sacrifice', 'reason.sacrificePrepared',
 ];
 const seen = new Set();
 for (const [name, lines] of searches) {

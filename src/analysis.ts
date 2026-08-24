@@ -280,7 +280,11 @@ function tacticalSwing(fen: string, pv: string[], threshold = 2, maxPly = 4) {
   );
   for (let i = 1; i < trace.length; i++) {
     const delta = trace[i].balance - trace[i - 1].balance;
-    if (Math.abs(delta) >= threshold) return { move: trace[i].san!, delta };
+    // `ply` is 1-based within the PV: 1 is the move being explained, 2 the
+    // opponent's reply to it. Material only ever moves on a capture, so a
+    // LOSS for the mover can only land on an even ply — 2 when this very move
+    // is the one being taken, later when a move further down the line is.
+    if (Math.abs(delta) >= threshold) return { move: trace[i].san!, delta, ply: i };
   }
   return null;
 }
@@ -330,6 +334,9 @@ export type MoveFacts = ReturnType<typeof buildMoveFacts>;
 
 export function buildMoveFacts(fen: string, line: EngineLine) {
   const pos = new Position(fen, line.moveUci);
+  // `swing` keeps the PoC's exact shape — test-analysis.mjs diffs it field by
+  // field against the Python implementation — so the ply rides alongside it.
+  const swing = tacticalSwing(fen, line.pv);
   return {
     san: pos.san,
     moveUci: line.moveUci,
@@ -346,7 +353,8 @@ export function buildMoveFacts(fen: string, line: EngineLine) {
     central: centralControlDelta(pos),
     kingSafety: kingSafety(pos),
     pawnStructure: pawnStructure(pos),
-    swing: tacticalSwing(fen, line.pv),
+    swing: swing && { move: swing.move, delta: swing.delta },
+    swingPly: swing?.ply ?? null,
     trend: strategicTrend(fen, line.pv, pos.mover),
     pvSan: pvToSan(fen, line.pv),
   };
@@ -388,10 +396,18 @@ export function explain(fen: string, lines: EngineLine[]): Explanation | null {
         ? { key: 'reason.matesNow', line }
         : { key: moverMates ? 'reason.mate' : 'reason.getsMated', params: { n: moverMates ? left : Math.abs(best.mateIn ?? 0) }, line },
     );
-    if (best.swing) {
+    // Material given up is only a SACRIFICE when it buys the mate: if the
+    // swing hands material TO the mover, or the mate is against them, then
+    // nothing is being sacrificed and the mate alone is the explanation.
+    const cost = best.swing ? (best.mover === 'w' ? -best.swing.delta : best.swing.delta) : 0;
+    if (best.swing && moverMates && cost > 0) {
       reasons.push({
-        key: 'reason.sacrifice',
-        detail: { key: 'detail.swing', params: { move: best.swing.move, delta: signed(best.swing.delta) } },
+        // The swing rarely lands on the move being explained: this move is the
+        // sacrifice only when the opponent takes on the very next ply.
+        key: best.swingPly === 2 ? 'reason.sacrifice' : 'reason.sacrificePrepared',
+        // Shown from the MOVER's side — the sentence is about what this move
+        // gives up, so White's point of view would read as the opposite.
+        detail: { key: 'detail.swing', params: { move: best.swing.move, delta: signed(-cost) } },
         line,
       });
     }
